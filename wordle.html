@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordle Showdown - PlayPal.ai</title>
+    
+    <link rel="icon" href="icons/favicon-16x16.png" type="image/png" sizes="16x16">
+    <link rel="icon" href="icons/favicon-32x32.png" type="image/png" sizes="32x32">
+    <link rel="icon" href="icons/favicon.ico">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" href="icons/android-chrome-192x192.png" type="image/png" sizes="192x192">
+    <link rel="icon" href="icons/android-chrome-512x512.png" type="image/png" sizes="512x512">
+    <link rel="manifest" href="site.webmanifest">
+
+    
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+    
+    <script type="module">
+        import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.24.0";
+        
+        let geminiModel;
+        
+       
+        const GEMINI_API_KEYS = [
+                REMOVED
+        ];
+        let currentGeminiKeyIndex = 0;
+        
+        async function initializeGemini() {
+            return initializeGeminiWithKey(currentGeminiKeyIndex);
+        }
+        
+        async function initializeGeminiWithKey(index) {
+            try {
+                const genAI = new GoogleGenerativeAI(GEMINI_API_KEYS[index]);
+                geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+                console.log("AI Model initialized successfully with key index:", index);
+            } catch (error) {
+                console.error("Failed to initialize AI Model:", error);
+            }
+        }
+        
+        async function rotateGeminiKey() {
+            currentGeminiKeyIndex = (currentGeminiKeyIndex + 1) % GEMINI_API_KEYS.length;
+            console.log("Rotating Gemini API key. New index:", currentGeminiKeyIndex);
+            await initializeGeminiWithKey(currentGeminiKeyIndex);
+        }
+        
+        window.initializeGemini = initializeGemini;
+        window.getGeminiModel = () => geminiModel;
+        window.rotateGeminiKey = rotateGeminiKey;
+        
+        initializeGemini();
+    </script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #ff6b6b;
+            --secondary: #4ecdc4;
+            --accent: #45b7d1;
+            --warning: #f9ca24;
+            --success: #6c5ce7;
+            --danger: #fd79a8;
+            
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --bg-glass: rgba(255, 255, 255, 0.05);
+            
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #666666;
+            
+            --border: rgba(255, 255, 255, 0.1);
+            --border-hover: rgba(255, 255, 255, 0.2);
+            
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 16px 64px rgba(0, 0, 0, 0.3);
+            --shadow-glow: 0 0 40px rgba(255, 107, 107, 0.3);
+            
+            --gradient-primary: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
+            --gradient-secondary: linear-gradient(135deg, #45b7d1 0%, #96ceb4 100%);
+            --gradient-accent: linear-gradient(135deg, #f9ca24 0%, #f0932b 100%);
+            --gradient-success: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+            --gradient-bg: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
+            
+            
+            --wordle-correct: #6aaa64;
+            --wordle-present: #c9b458;
+            --wordle-absent: #787c7e;
+            --wordle-bg: #ffffff;
+            --wordle-border: #d3d6da;
+            --wordle-text: #000000;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            background: var(--gradient-bg);
+        }
+
+        
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background-image: 
+                linear-gradient(rgba(255, 107, 107, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 107, 107, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        
+        .header {
+            padding: 1rem;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        .logo {
+            font-family: 'Fredoka One', cursive;
+            font-size: 2.5rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+            position: relative;
+            animation: logoFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .tagline {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+        }
+
+        
+        .score-display {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 1rem 0;
+            padding: 0 1rem;
+        }
+
+        .score-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 1rem 1.5rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border);
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .score-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .score-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ai-score .score-value {
+            background: var(--gradient-secondary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        
+        .game-container {
+            max-width: 560px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        
+        .wordle-container {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .game-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 2rem;
+        }
+
+        .game-board {
+            display: grid;
+            grid-template-rows: repeat(6, 1fr);
+            gap: 5px;
+            margin-bottom: 2rem;
+            max-width: 350px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+        }
+
+        .tile {
+            width: 62px;
+            height: 62px;
+            border: 2px solid var(--wordle-border);
+            background: var(--wordle-bg);
+            color: var(--wordle-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .tile.filled {
+            border-color: #878a8c;
+            animation: tilePop 0.2s ease;
+        }
+
+        .tile.correct {
+            background: var(--wordle-correct);
+            border-color: var(--wordle-correct);
+            color: white;
+            animation: tileFlip 0.6s ease;
+        }
+
+        .tile.present {
+            background: var(--wordle-present);
+            border-color: var(--wordle-present);
+            color: white;
+            animation: tileFlip 0.6s ease;
+        }
+
+        .tile.absent {
+            background: var(--wordle-absent);
+            border-color: var(--wordle-absent);
+            color: white;
+            animation: tileFlip 0.6s ease;
+        }
+
+        @keyframes tilePop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes tileFlip {
+            0% { transform: rotateX(0); }
+            50% { transform: rotateX(-90deg); }
+            100% { transform: rotateX(0); }
+        }
+
+        
+        .keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 720px;          
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 8px;            
+}
+
+.keyboard-row {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    width: 100%;
+}
+
+.key {
+    background: var(--wordle-bg);
+    border: 1px solid var(--wordle-border);
+    color: var(--wordle-text);
+    border-radius: 4px;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    
+    flex: 1 1 0;
+    min-width: 0;                              
+    height: clamp(44px, 8.8vw, 58px);
+    font-size: clamp(0.8rem, 2.8vw, 0.875rem);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.key.wide {
+    
+    flex: 1.5 1 0;
+}
+
+
+.key:hover { background: #e6e6e6; }
+.key:active { background: #d4d4d4; }
+.key.correct { background: var(--wordle-correct); border-color: var(--wordle-correct); color: #fff; }
+.key.present { background: var(--wordle-present); border-color: var(--wordle-present); color: #fff; }
+.key.absent  { background: var(--wordle-absent);  border-color: var(--wordle-absent);  color: #fff; }
+
+
+        
+        .game-status {
+            text-align: center;
+            margin: 1rem 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            min-height: 2rem;
+        }
+
+        .status-message {
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ai-thinking {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        
+        .ai-section {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            margin-top: 2rem;
+        }
+
+        .ai-title {
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--gradient-secondary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1.5rem;
+        }
+
+        .ai-board {
+            display: grid;
+            grid-template-rows: repeat(6, 1fr);
+            gap: 5px;
+            margin-bottom: 1rem;
+            max-width: 350px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .ai-reasoning {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            border: 1px solid var(--border);
+            animation: slideUp 0.5s ease-out;
+        }
+
+        .ai-reasoning h3 {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            margin-bottom: 0.8rem;
+            background: var(--gradient-secondary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ai-reasoning p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            font-size: 0.95rem;
+            font-style: italic;
+        }
+
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        
+        @media (max-width: 600px) {
+            .tile {
+                width: 50px;
+                height: 50px;
+                font-size: 1.5rem;
+            }
+            
+            .keyboard { gap: 6px; padding: 0 6px; }
+    .keyboard-row { gap: 4px; }
+    .key { height: clamp(40px, 9.5vw, 50px); font-size: clamp(0.75rem, 3.2vw, 0.85rem); }
+    .key.wide { flex: 1.6 1 0; }
+
+            
+            .score-display {
+                gap: 1rem;
+            }
+            
+            .score-card {
+                padding: 0.8rem 1rem;
+                min-width: 100px;
+            }
+        }
+
+
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 3rem;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .modal-message {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .modal-btn {
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-md);
+        }
+
+        .modal-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        
+        .reset-notification {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .notification-content {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 3rem;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .notification-content h3 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .notification-content p {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+
+        .notification-content button {
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-md);
+        }
+
+        .notification-content button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="bg-animation"></div>
+    
+    
+    <div class="grid-bg"></div>
+
+
+    
+    <header class="header">
+        <h1 class="logo">Wordle Showdown</h1>
+        <p class="tagline">You vs AI - Who's the Word Master?</p>
+    </header>
+
+    
+    <div class="score-display">
+        <div class="score-card">
+            <div class="score-label">Your Score</div>
+            <div class="score-value" id="userScore">0</div>
+        </div>
+        <div class="score-card ai-score">
+            <div class="score-label">AI Score</div>
+            <div class="score-value" id="aiScore">0</div>
+        </div>
+    </div>
+
+    
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Loading your Wordle challenge...</p>
+    </div>
+
+    
+    <div class="game-container" id="gameContainer" style="display: none;">
+        
+        <div class="wordle-container">
+            <h2 class="game-title">Your Turn</h2>
+            <div class="game-status" id="userStatus">
+                <span class="status-message">Start guessing! You have 6 attempts.</span>
+            </div>
+            
+            <div class="game-board" id="userBoard">
+                
+            </div>
+            
+            <div class="keyboard" id="userKeyboard">
+                
+            </div>
+        </div>
+
+        
+        <div class="ai-section" id="aiSection" style="display: none;">
+            <h2 class="ai-title">AI's Turn</h2>
+            <div class="game-status" id="aiStatus">
+                <span class="ai-thinking">Come back tomorrow...</span>
+            </div>
+            
+            <div class="ai-board" id="aiBoard">
+                
+            </div>
+            
+            <div class="ai-reasoning" id="aiReasoning" style="display: none;">
+                <h3>AI's Reasoning:</h3>
+                <p id="reasoningText"></p>
+            </div>
+        </div>
+    </div>
+
+    
+    <div class="modal" id="gameModal">
+        <div class="modal-content">
+            <h2 class="modal-title" id="modalTitle">Game Over!</h2>
+            <p class="modal-message" id="modalMessage">The word was: <strong id="correctWord"></strong></p>
+            <button class="modal-btn" onclick="closeModal()">Play Again Tomorrow</button>
+        </div>
+    </div>
+
+    <script>
+       
+        const firebaseConfig = {
+                REMOVED
+        };
+
+       
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+       
+        let currentWord = '';
+        let userGuesses = [];
+        let aiGuesses = [];
+        let userCurrentGuess = '';
+        let userCurrentRow = 0;
+        let aiCurrentRow = 0;
+        let gameState = 'user';
+        let userScore = 0;
+        let aiScore = 0;
+        let lastPlayDate = null;
+        let aiReasonings = [];
+        let lastAIGuessAt = 0;
+        const AI_COOLDOWN_MS = 40000;
+
+
+       
+        let words = [];
+
+       
+        async function loadWords() {
+            try {
+                const response = await fetch('words.txt');
+                const text = await response.text();
+                words = text.split('\n')
+                    .map(word => word.trim().toLowerCase())
+                    .filter(word => word.length === 5 && word.match(/^[a-z]+$/));
+                console.log('Loaded', words.length, 'words from words.txt');
+            } catch (error) {
+                console.error('Failed to load words.txt, using fallback words');
+               
+                words = [
+                    'scowl', 'wager', 'tying', 'swarm', 'shady', 'lying', 'heady', 'fluke', 'bland',
+                    'forum', 'stray', 'house', 'drift', 'apple', 'beach', 'chair', 'dream',
+                    'earth', 'faith', 'grace', 'happy', 'light', 'music', 'ocean', 'peace', 'queen',
+                    'river', 'smile', 'tiger', 'unity', 'vital', 'world', 'youth', 'zebra', 'brave',
+                    'cloud', 'dance', 'eagle', 'flame', 'green', 'heart', 'image', 'jolly', 'karma'
+                ];
+            }
+        }
+
+       
+        async function initGame() {
+            console.log('Initializing Wordle game...');
+            showLoading();
+            
+            try {
+               
+                console.log('Loading words...');
+                await loadWords();
+                
+               
+                console.log('Waiting for authentication...');
+                const user = await waitForAuth();
+                console.log('User authenticated:', user.email);
+                
+               
+                console.log('Loading user data...');
+                await loadUserData();
+                
+               
+                console.log('Checking game reset...');
+                await checkGameReset();
+                
+               
+                console.log('Loading game state...');
+                await loadGameState();
+                
+               
+                if (!currentWord) {
+                    console.log('No current word found, generating new one');
+                    currentWord = getRandomWord();
+                    gameState = 'user';
+                    await saveGameState();
+                }
+                
+                console.log('Game initialized successfully!');
+                console.log('Current word:', currentWord);
+                console.log('Game state:', gameState);
+                hideLoading();
+                showGame();
+            } catch (error) {
+                console.error('Error initializing game:', error);
+                window.location.href = 'index.html';
+            }
+        }
+
+       
+        function waitForAuth() {
+            return new Promise((resolve, reject) => {
+                const user = auth.currentUser;
+                if (user) {
+                    resolve(user);
+                    return;
+                }
+                
+               
+                const timeout = setTimeout(() => {
+                    console.log('Auth timeout, redirecting to login...');
+                    window.location.href = 'index.html';
+                }, 3000);
+                
+               
+                const unsubscribe = auth.onAuthStateChanged((user) => {
+                    clearTimeout(timeout);
+                    unsubscribe();
+                    if (user) {
+                        resolve(user);
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                });
+            });
+        }
+
+       
+        async function loadUserData() {
+            const user = auth.currentUser;
+            const userRef = database.ref('users/' + user.uid + '/wordle');
+            
+            return new Promise((resolve) => {
+                userRef.once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        userScore = data.userScore || 0;
+                        aiScore = data.aiScore || 0;
+                        lastPlayDate = data.lastPlayDate;
+                    }
+                    updateScoreDisplay();
+                    resolve();
+                });
+            });
+        }
+
+       
+        async function checkGameReset() {
+            const now = new Date();
+            const today = now.toDateString();
+            
+            console.log('Checking game reset. Last play date:', lastPlayDate, 'Today:', today);
+            
+            if (lastPlayDate !== today) {
+               
+                console.log('Resetting game for new day');
+                currentWord = getRandomWord();
+                userGuesses = [];
+                aiGuesses = [];
+                userCurrentGuess = '';
+                userCurrentRow = 0;
+                aiCurrentRow = 0;
+                gameState = 'user';
+                
+                console.log('New game state set. Current word:', currentWord, 'Game state:', gameState);
+                
+               
+                await saveGameState();
+            } else {
+                console.log('Game continues from previous day');
+            }
+        }
+
+       
+        async function loadGameState() {
+            const user = auth.currentUser;
+            const gameRef = database.ref('users/' + user.uid + '/wordle');
+            
+            return new Promise(async (resolve) => {
+                gameRef.once('value', async (snapshot) => {
+                    const data = snapshot.val();
+                    console.log('Loaded game data:', data);
+                    
+                    if (data && data.currentWord) {
+                        currentWord = data.currentWord;
+                        userGuesses = data.userGuesses || [];
+                        aiGuesses = data.aiGuesses || [];
+                        userCurrentGuess = data.userCurrentGuess || '';
+                        userCurrentRow = data.userCurrentRow || 0;
+                        aiCurrentRow = data.aiCurrentRow || 0;
+                        gameState = data.gameState || 'user';
+                        aiReasonings = data.aiReasonings || [];
+                        console.log('Loaded existing game. Current word:', currentWord);
+                    } else {
+                       
+                        console.log('No existing game found, starting new game');
+                        currentWord = getRandomWord();
+                        userGuesses = [];
+                        aiGuesses = [];
+                        userCurrentGuess = '';
+                        userCurrentRow = 0;
+                        aiCurrentRow = 0;
+                        gameState = 'user';
+                        await saveGameState();
+                        console.log('New game created. Current word:', currentWord);
+                    }
+                    resolve();
+                });
+            });
+        }
+
+       
+        async function saveGameState() {
+            const user = auth.currentUser;
+            const gameRef = database.ref('users/' + user.uid + '/wordle');
+            
+            const gameData = {
+                currentWord,
+                userGuesses,
+                aiGuesses,
+                userCurrentGuess,
+                userCurrentRow,
+                aiCurrentRow,
+                gameState,
+                userScore,
+                aiScore,
+                lastPlayDate: new Date().toDateString(),
+                aiReasonings
+            };
+            
+            await gameRef.set(gameData);
+        }
+
+       
+        function getRandomWord() {
+            const word = words[Math.floor(Math.random() * words.length)];
+            console.log('Generated random word:', word);
+            return word;
+        }
+
+       
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('gameContainer').style.display = 'none';
+        }
+
+       
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+       
+        function showGame() {
+            document.getElementById('gameContainer').style.display = 'block';
+            createGameBoard();
+            createKeyboard();
+            updateDisplay();
+            
+           
+            if (gameState === 'completed' || (userGuesses.length > 0 && aiGuesses.length > 0)) {
+                document.getElementById('aiSection').style.display = 'block';
+                showAIReasoning();
+                showResetNotification();
+            }
+        }
+
+       
+        function createGameBoard() {
+            const userBoard = document.getElementById('userBoard');
+            const aiBoard = document.getElementById('aiBoard');
+            
+            userBoard.innerHTML = '';
+            aiBoard.innerHTML = '';
+            
+            for (let row = 0; row < 6; row++) {
+                const userRow = document.createElement('div');
+                const aiRow = document.createElement('div');
+                userRow.className = 'row';
+                aiRow.className = 'row';
+                
+                for (let col = 0; col < 5; col++) {
+                    const userTile = document.createElement('div');
+                    const aiTile = document.createElement('div');
+                    userTile.className = 'tile';
+                    aiTile.className = 'tile';
+                    
+                    userRow.appendChild(userTile);
+                    aiRow.appendChild(aiTile);
+                }
+                
+                userBoard.appendChild(userRow);
+                aiBoard.appendChild(aiRow);
+            }
+        }
+
+       
+        function createKeyboard() {
+            const keyboard = document.getElementById('userKeyboard');
+            const rows = [
+                ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+                ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+                ['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'BACKSPACE']
+            ];
+            
+            keyboard.innerHTML = '';
+            
+            rows.forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'keyboard-row';
+                
+                row.forEach(key => {
+                    const keyDiv = document.createElement('div');
+                    keyDiv.className = 'key';
+                    if (key === 'ENTER' || key === 'BACKSPACE') {
+                        keyDiv.classList.add('wide');
+                        keyDiv.innerHTML = key === 'ENTER' ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-delete-left"></i>';
+                    } else {
+                        keyDiv.textContent = key;
+                    }
+                    keyDiv.onclick = () => handleKeyPress(key);
+                    rowDiv.appendChild(keyDiv);
+                });
+                
+                keyboard.appendChild(rowDiv);
+            });
+        }
+
+       
+        function handleKeyPress(key) {
+            if (gameState !== 'user') return;
+            
+            if (key === 'ENTER') {
+                submitGuess();
+            } else if (key === 'BACKSPACE') {
+                deleteLetter();
+            } else if (userCurrentGuess.length < 5) {
+                addLetter(key);
+            }
+        }
+
+       
+        function addLetter(letter) {
+            console.log('Adding letter:', letter, 'Game state:', gameState, 'Current word:', currentWord);
+            if (userCurrentGuess.length < 5) {
+                userCurrentGuess += letter;
+                updateDisplay();
+            }
+        }
+
+       
+        function deleteLetter() {
+            if (userCurrentGuess.length > 0) {
+                userCurrentGuess = userCurrentGuess.slice(0, -1);
+                updateDisplay();
+            }
+        }
+
+       
+        async function submitGuess() {
+            if (userCurrentGuess.length !== 5) return;
+            
+            if (!currentWord) {
+                console.error('No current word set!');
+                document.getElementById('userStatus').innerHTML = '<span class="status-message">Game not ready. Please refresh.</span>';
+                return;
+            }
+            
+            const guess = userCurrentGuess.toLowerCase();
+            
+           
+            if (userGuesses.includes(guess)) {
+                document.getElementById('userStatus').innerHTML = '<span class="status-message">You already tried this word!</span>';
+                return;
+            }
+            
+            if (!words.includes(guess)) {
+                document.getElementById('userStatus').innerHTML = '<span class="status-message">Not a valid word!</span>';
+                return;
+            }
+            
+           
+            if (gameState !== 'user') {
+                return;
+            }
+            
+           
+            gameState = 'processing';
+            
+            userGuesses.push(guess);
+            
+           
+            await animateGuess(userCurrentRow, guess, 'user');
+            
+            userCurrentRow++;
+            userCurrentGuess = '';
+            
+            if (guess === currentWord) {
+               
+                userScore += (7 - userCurrentRow);
+                gameState = 'finished';
+                document.getElementById('userStatus').innerHTML = '<span class="status-message">You got it! Now watch the AI try...</span>';
+                await saveGameState();
+                updateScoreDisplay();
+                setTimeout(() => startAIGame(), 2000);
+            } else if (userCurrentRow >= 6) {
+               
+                gameState = 'finished';
+                document.getElementById('userStatus').innerHTML = '<span class="status-message">Game over! The word was: ' + currentWord.toUpperCase() + '</span>';
+                await saveGameState();
+                setTimeout(() => startAIGame(), 2000);
+            } else {
+               
+                gameState = 'user';
+                document.getElementById('userStatus').innerHTML = '<span class="status-message">Keep going! ' + (6 - userCurrentRow) + ' attempts left.</span>';
+                await saveGameState();
+            }
+        }
+
+       
+        async function animateGuess(row, guess, player) {
+           
+            if (!currentWord || !guess || guess.length !== 5) {
+                console.error('Invalid inputs for animateGuess:', { currentWord, guess, player });
+                return;
+            }
+            
+            const board = player === 'user' ? document.getElementById('userBoard') : document.getElementById('aiBoard');
+            if (!board || !board.children[row]) {
+                console.error('Board or row not found:', { board, row, player });
+                return;
+            }
+            
+            const tiles = board.children[row].children;
+            
+           
+            for (let i = 0; i < 5; i++) {
+                if (tiles[i] && guess[i]) {
+                    tiles[i].textContent = guess[i].toUpperCase();
+                    tiles[i].classList.add('filled');
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+            
+           
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+           
+            for (let i = 0; i < 5; i++) {
+                const letter = guess[i];
+                const tile = tiles[i];
+                
+                if (tile && letter && currentWord) {
+                    if (currentWord[i] === letter) {
+                        tile.classList.add('correct');
+                    } else if (currentWord.includes(letter)) {
+                        tile.classList.add('present');
+                    } else {
+                        tile.classList.add('absent');
+                    }
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+           
+            if (player === 'user') {
+                updateKeyboardColors(guess);
+            }
+        }
+
+       
+        function updateKeyboardColors(guess) {
+            if (!currentWord || !guess) {
+                console.error('Invalid inputs for updateKeyboardColors:', { currentWord, guess });
+                return;
+            }
+            
+            const keyboard = document.getElementById('userKeyboard');
+            if (!keyboard) {
+                console.error('Keyboard not found');
+                return;
+            }
+            
+            const keys = keyboard.querySelectorAll('.key');
+            
+            guess.split('').forEach((letter, index) => {
+                const key = Array.from(keys).find(k => k.textContent === letter.toUpperCase());
+                if (key && currentWord) {
+                    if (currentWord[index] === letter) {
+                        key.classList.add('correct');
+                    } else if (currentWord.includes(letter)) {
+                        key.classList.add('present');
+                    } else {
+                        key.classList.add('absent');
+                    }
+                }
+            });
+        }
+
+       
+        async function startAIGame() {
+            document.getElementById('aiSection').style.display = 'block';
+            
+           
+            document.getElementById('aiSection').scrollIntoView({ behavior: 'smooth' });
+            
+            document.getElementById('aiStatus').innerHTML = '<span class="ai-thinking">AI is analyzing the word...</span>';
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+           
+            for (let attempt = 0; attempt < 6; attempt++) {
+                const aiResult = await getAIGuess();
+                if (!aiResult) break;
+                
+                const aiGuess = aiResult.guess;
+                const reasoning = aiResult.reasoning;
+                
+                aiGuesses.push(aiGuess);
+                document.getElementById('aiStatus').innerHTML = `<span class="ai-thinking">AI guessed: ${aiGuess.toUpperCase()}</span>`;
+                
+                await animateGuess(aiCurrentRow, aiGuess, 'ai');
+                aiCurrentRow++;
+                
+               
+                showCurrentAIReasoning(reasoning);
+                await saveGameState();
+                
+                if (aiGuess === currentWord) {
+                   
+                    aiScore += (7 - aiCurrentRow);
+                    document.getElementById('aiStatus').innerHTML = '<span class="status-message">AI got it in ' + aiCurrentRow + ' tries!</span>';
+                    break;
+                }
+                
+               
+                if (attempt < 5) {
+                    document.getElementById('aiStatus').innerHTML = '<span class="ai-thinking">AI is analyzing the results...</span>';
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            
+            if (aiGuesses[aiGuesses.length - 1] !== currentWord) {
+                document.getElementById('aiStatus').innerHTML = '<span class="status-message">AI couldn\'t solve it!</span>';
+            }
+            
+           
+            gameState = 'completed';
+            await saveGameState();
+            updateScoreDisplay();
+            
+           
+            setTimeout(() => showGameOver(), 2000);
+        }
+
+       
+        function showCurrentAIReasoning(reasoning) {
+            const reasoningDiv = document.getElementById('aiReasoning');
+            const reasoningText = document.getElementById('reasoningText');
+            
+            reasoningText.textContent = reasoning;
+            reasoningDiv.style.display = 'block';
+        }
+
+        async function waitForAICooldown() {
+    if (!lastAIGuessAt) return;              
+    const elapsed = Date.now() - lastAIGuessAt;
+    const remaining = AI_COOLDOWN_MS - elapsed;
+    if (remaining > 0) {
+        const aiStatus = document.getElementById('aiStatus');
+       
+        const endTime = Date.now() + remaining;
+        const tick = setInterval(() => {
+            const secs = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+            aiStatus.innerHTML = `<span class="ai-thinking">AI is analyzing the results...</span>`;
+            if (secs <= 0) clearInterval(tick);
+        }, 250);
+        await new Promise(r => setTimeout(r, remaining));
+    }
+}
+
+
+       
+        async function getAIGuess(allowRetry = true) {
+            try {
+                await waitForAICooldown();    
+                lastAIGuessAt = Date.now();   
+                const geminiModel = window.getGeminiModel();
+                if (!geminiModel) {
+                    console.error('Model not initialized');
+                   
+                    if (allowRetry) {
+                        const aiStatus = document.getElementById('aiStatus');
+                        if (aiStatus) aiStatus.innerHTML = '<span class="ai-thinking">AI model not ready. Retrying in 50 seconds...</span>';
+                       
+                        if (window.rotateGeminiKey) {
+                            await window.rotateGeminiKey();
+                        }
+                        await new Promise(r => setTimeout(r, 50000));
+                        return await getAIGuess(false);
+                    }
+                    return null;
+                }
+                
+               
+                const aiBoard = document.getElementById('aiBoard');
+                const canvas = await html2canvas(aiBoard);
+                const imageData = canvas.toDataURL('image/png');
+                
+               
+                let context = `You are playing Wordle against a human player. Look at the screenshot of your current game board and make your next guess.
+
+Wordle Rules:
+- Green tile: Letter is correct and in the right position
+- Yellow tile: Letter is in the word but wrong position  
+- Gray tile: Letter is not in the word at all
+- You have 6 total attempts
+- Use only valid 5-letter English words from the official Wordle word list
+
+Strategy:
+1. If this is your first guess, use a word with common letters like "CRANE" or "SLATE"
+2. Use feedback from previous guesses to eliminate impossible letters
+3. Try to use letters you haven't tried yet
+4. Consider letter frequency in English words
+5. Make educated guesses based on the pattern
+
+Previous guesses: ${aiGuesses.join(', ').toUpperCase()}
+
+Look at the screenshot and analyze the current state. Respond with a JSON object in this exact format:
+{
+  "guess": "YOUR_5_LETTER_WORD_IN_UPPERCASE",
+  "reasoning": "Brief explanation of why you chose this word"
+}
+
+Only respond with the JSON object, nothing else.`;
+                
+                const result = await geminiModel.generateContent([
+                    context,
+                    {
+                        inlineData: {
+                            data: imageData.split(',')[1],
+                            mimeType: 'image/png'
+                        }
+                    }
+                ]);
+                const response = await result.response;
+                const text = response.text().trim();
+                console.log('AI response:', text);
+                
+               
+                try {
+                    const jsonMatch = text.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const aiResponse = JSON.parse(jsonMatch[0]);
+                        const guess = aiResponse.guess.toLowerCase();
+                        const reasoning = aiResponse.reasoning;
+                        
+                        console.log('AI reasoning:', reasoning);
+                        
+                        if (words.includes(guess) && guess.length === 5) {
+                           
+                            aiReasonings.push(reasoning);
+                            return { guess, reasoning };
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to parse AI JSON response:', error);
+                }
+                
+               
+                if (allowRetry) {
+                    const aiStatus = document.getElementById('aiStatus');
+                    if (aiStatus) aiStatus.innerHTML = '<span class="ai-thinking">AI response invalid. Retrying in 50 seconds...</span>';
+                    await new Promise(r => setTimeout(r, 50000));
+                    return await getAIGuess(false);
+                }
+                return null;
+                
+            } catch (error) {
+                console.error('Error getting AI guess:', error);
+               
+                if (allowRetry) {
+                    const aiStatus = document.getElementById('aiStatus');
+                    if (aiStatus) aiStatus.innerHTML = '<span class="ai-thinking">Model Overloaded. Retrying shortly...</span>';
+                   
+                    if (window.rotateGeminiKey) {
+                        await window.rotateGeminiKey();
+                    }
+                    await new Promise(r => setTimeout(r, 50000));
+                    return await getAIGuess(false);
+                }
+                return null;
+            }
+        }
+
+       
+        function getStrategicWord() {
+            const strategicWords = ['crane', 'slate', 'crate', 'trace', 'adieu', 'audio', 'house', 'mouse', 'about', 'above'];
+            
+           
+            for (const word of strategicWords) {
+                if (!aiGuesses.includes(word) && words.includes(word)) {
+                    const reasoning = `Using strategic word ${word.toUpperCase()} to test common letters.`;
+                    aiReasonings.push(reasoning);
+                    return { guess: word, reasoning };
+                }
+            }
+            
+           
+            const unusedWords = words.filter(word => !aiGuesses.includes(word));
+            const word = unusedWords[Math.floor(Math.random() * unusedWords.length)];
+            const reasoning = `Making a random guess with ${word.toUpperCase()}.`;
+            aiReasonings.push(reasoning);
+            return { guess: word, reasoning };
+        }
+
+       
+        function getGuessResult(guess) {
+            let result = '';
+            for (let i = 0; i < 5; i++) {
+                if (currentWord[i] === guess[i]) {
+                    result += 'G';
+                } else if (currentWord.includes(guess[i])) {
+                    result += 'Y';
+                } else {
+                    result += 'B';
+                }
+            }
+            return result;
+        }
+
+       
+        function updateDisplay() {
+            const userBoard = document.getElementById('userBoard');
+            const aiBoard = document.getElementById('aiBoard');
+            
+           
+            for (let row = 0; row < 6; row++) {
+                const tiles = userBoard.children[row].children;
+                
+                if (row < userGuesses.length) {
+                   
+                    const guess = userGuesses[row];
+                    for (let col = 0; col < 5; col++) {
+                        tiles[col].textContent = guess[col].toUpperCase();
+                        tiles[col].classList.add('filled');
+                        
+                        if (currentWord[col] === guess[col]) {
+                            tiles[col].classList.add('correct');
+                        } else if (currentWord.includes(guess[col])) {
+                            tiles[col].classList.add('present');
+                        } else {
+                            tiles[col].classList.add('absent');
+                        }
+                    }
+                } else if (row === userCurrentRow) {
+                   
+                    for (let col = 0; col < 5; col++) {
+                        if (col < userCurrentGuess.length) {
+                            tiles[col].textContent = userCurrentGuess[col].toUpperCase();
+                            tiles[col].classList.add('filled');
+                        } else {
+                            tiles[col].textContent = '';
+                            tiles[col].classList.remove('filled');
+                        }
+                    }
+                } else {
+                   
+                    for (let col = 0; col < 5; col++) {
+                        tiles[col].textContent = '';
+                        tiles[col].classList.remove('filled', 'correct', 'present', 'absent');
+                    }
+                }
+            }
+            
+           
+            if (aiBoard && aiGuesses && aiGuesses.length > 0) {
+                document.getElementById('aiSection').style.display = 'block';
+                for (let row = 0; row < 6; row++) {
+                    const tiles = aiBoard.children[row].children;
+                    if (row < aiGuesses.length) {
+                        const guess = aiGuesses[row];
+                        for (let col = 0; col < 5; col++) {
+                            tiles[col].textContent = guess[col].toUpperCase();
+                            tiles[col].classList.add('filled');
+                            if (currentWord[col] === guess[col]) {
+                                tiles[col].classList.add('correct');
+                            } else if (currentWord.includes(guess[col])) {
+                                tiles[col].classList.add('present');
+                            } else {
+                                tiles[col].classList.add('absent');
+                            }
+                        }
+                    } else {
+                        for (let col = 0; col < 5; col++) {
+                            tiles[col].textContent = '';
+                            tiles[col].classList.remove('filled', 'correct', 'present', 'absent');
+                        }
+                    }
+                }
+               
+                showAIReasoning();
+            }
+        }
+
+       
+        function updateScoreDisplay() {
+            document.getElementById('userScore').textContent = userScore;
+            document.getElementById('aiScore').textContent = aiScore;
+        }
+
+       
+        function showGameOver() {
+            const modal = document.getElementById('gameModal');
+            const title = document.getElementById('modalTitle');
+            const message = document.getElementById('modalMessage');
+            const word = document.getElementById('correctWord');
+            
+            word.textContent = currentWord.toUpperCase();
+            
+            if (userGuesses.includes(currentWord) && aiGuesses.includes(currentWord)) {
+                title.textContent = 'Tie Game!';
+                message.innerHTML = `Both you and the AI solved it!<br>The word was: <strong>${currentWord.toUpperCase()}</strong>`;
+            } else if (userGuesses.includes(currentWord)) {
+                title.textContent = 'You Win!';
+                message.innerHTML = `You solved it before the AI!<br>The word was: <strong>${currentWord.toUpperCase()}</strong>`;
+            } else if (aiGuesses.includes(currentWord)) {
+                title.textContent = 'AI Wins!';
+                message.innerHTML = `The AI solved it before you!<br>The word was: <strong>${currentWord.toUpperCase()}</strong>`;
+            } else {
+                title.textContent = 'No Winner!';
+                message.innerHTML = `Neither of you solved it!<br>The word was: <strong>${currentWord.toUpperCase()}</strong>`;
+            }
+            
+            modal.style.display = 'block';
+        }
+
+       
+        function closeModal() {
+            document.getElementById('gameModal').style.display = 'none';
+        }
+
+       
+        function showAIReasoning() {
+            if (aiReasonings.length > 0) {
+                const reasoningDiv = document.getElementById('aiReasoning');
+                const reasoningText = document.getElementById('reasoningText');
+                
+               
+                const latestReasoning = aiReasonings[aiReasonings.length - 1];
+                reasoningText.textContent = latestReasoning;
+                reasoningDiv.style.display = 'block';
+            }
+        }
+
+       
+        function showResetNotification() {
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+            
+            const timeUntilReset = tomorrow - now;
+            const hoursUntilReset = Math.ceil(timeUntilReset / (1000 * 60 * 60));
+            
+            const notification = document.createElement('div');
+            notification.className = 'reset-notification';
+            notification.innerHTML = `
+                <div class="notification-content">
+                    <h3>Game Complete!</h3>
+                    <p>Wordle will reset in ${hoursUntilReset} hours with a new word.</p>
+                    <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+        }
+
+
+       
+        document.addEventListener('keydown', (e) => {
+            console.log('Key pressed:', e.key, 'Game state:', gameState);
+            if (gameState !== 'user') return;
+            
+            const key = e.key.toUpperCase();
+            
+            if (key === 'ENTER') {
+                submitGuess();
+            } else if (key === 'BACKSPACE') {
+                deleteLetter();
+            } else if (key.match(/[A-Z]/) && key.length === 1) {
+                addLetter(key);
+            }
+        });
+
+       
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, checking auth state...');
+            console.log('Current user:', auth.currentUser);
+            
+           
+            if (auth.currentUser) {
+                console.log('User already authenticated, starting game...');
+                initGame();
+            } else {
+                console.log('No user found, waiting for auth state change...');
+                initGame();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Trivia Arena – PlayPal.ai</title>
+  <link rel="icon" href="icons/favicon-16x16.png" type="image/png" sizes="16x16">
+  <link rel="icon" href="icons/favicon-32x32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="icons/favicon.ico">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/android-chrome-192x192.png" type="image/png" sizes="192x192">
+  <link rel="icon" href="icons/android-chrome-512x512.png" type="image/png" sizes="512x512">
+  <link rel="manifest" href="site.webmanifest">
+
+  
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+  
+  <script type="module">
+    import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.24.0";
+    let geminiModel;
+    async function initializeGemini(){
+      try{
+        const API_KEY="REMOVED";
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        geminiModel = genAI.getGenerativeModel({ model:"gemini-2.0-flash" });
+      }catch(e){ console.error(e); }
+    }
+    window.getGeminiModel=()=>geminiModel;
+    initializeGemini();
+  </script>
+
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --primary:#ff6b6b;--secondary:#4ecdc4;--accent:#45b7d1;--success:#6c5ce7;
+      --bg-primary:#0a0a0a;--bg-secondary:#121212;--bg-tertiary:#1b1b1b;--bg-glass:rgba(255,255,255,.06);
+      --text-primary:#fff;--text-secondary:#c9c9c9;--text-muted:#8a8a8a;
+      --border:rgba(255,255,255,.12);--border-hover:rgba(255,255,255,.22);
+      --shadow-md:0 8px 32px rgba(0,0,0,.28);--shadow-lg:0 16px 64px rgba(0,0,0,.35);
+      --gradient-primary:linear-gradient(135deg,#ff6b6b 0%,#4ecdc4 100%);
+      --gradient-secondary:linear-gradient(135deg,#45b7d1 0%,#96ceb4 100%);
+      --gradient-bg:linear-gradient(135deg,#0a0a0a 0%,#1a1a1a 50%,#2a2a2a 100%)
+    }
+    body{font-family:'Poppins',sans-serif;background:var(--bg-primary);color:var(--text-primary);min-height:100vh;overflow-x:hidden}
+    .bg{position:fixed;inset:0;z-index:-2;background:var(--gradient-bg)}
+    .grid{position:fixed;inset:0;z-index:-1;background-image:
+      linear-gradient(rgba(255,107,107,.03) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,107,107,.03) 1px,transparent 1px);
+      background-size:50px 50px;animation:gridMove 22s linear infinite}
+    @keyframes gridMove{to{transform:translate(50px,50px)}}
+
+    header{text-align:center;padding:1.2rem 1rem}
+    .logo{font-family:'Fredoka One',cursive;font-size:2.2rem;background:var(--gradient-primary);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:float 3s ease-in-out infinite}
+    @keyframes float{50%{transform:translateY(-6px)}}
+    .tag{color:var(--text-secondary);font-size:.95rem;margin-top:.25rem}
+    .card{margin-top:1rem;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:22px;padding:1.1rem;box-shadow:var(--shadow-lg)}
+    .title{font-size:1.3rem;text-align:center;margin-bottom:.75rem;font-weight:700;background:var(--gradient-primary);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+    .question{background:var(--bg-secondary);border:1px solid var(--border);border-radius:16px;padding:1rem}
+    .q-meta{display:flex;justify-content:space-between;color:var(--text-secondary);font-size:.92rem;margin-bottom:.5rem}
+    .q-meta .cat{font-weight:600;color:#fff;opacity:.9}
+    .q-text{line-height:1.5}
+    .container{max-width:720px;margin:0 auto;padding:1rem}
+    .bar{display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center;align-items:center}
+
+    .pill{display:flex;align-items:center;gap:.6rem;background:var(--bg-glass);border:1px solid var(--border);
+      padding:.6rem .9rem;border-radius:14px;box-shadow:var(--shadow-md)}
+    .pill label{color:#fff;opacity:.9;font-weight:600;letter-spacing:.15px}
+
+    
+    .selectbox{position:relative}
+    .select-trigger{
+      display:flex;align-items:center;gap:.5rem;background:transparent;border:0;color:#fff;
+      font-weight:600;padding:.3rem .2rem;cursor:pointer;outline:none;letter-spacing:.2px
+    }
+    .chev{width:14px;height:14px;opacity:.8}
+    .menu{
+      position:absolute;top:calc(100% + 8px);left:0;z-index:5;
+      background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;
+      box-shadow:var(--shadow-lg);padding:.3rem;display:none;max-height:260px;overflow:auto;min-width:180px
+    }
+    .menu.open{display:block;animation:fadeIn .12s ease-out}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+    .opt{padding:.55rem .7rem;border-radius:10px;cursor:pointer;color:#fff;font-weight:600}
+    .opt:hover{background:var(--bg-glass);border:1px solid var(--border-hover)}
+    .opt.active{background:var(--gradient-primary);border:0}
+    .native-select{position:absolute;opacity:0;pointer-events:none;height:0;width:0}
+
+    .score{font-weight:700;background:var(--gradient-primary);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+    .card{margin-top:1rem;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:22px;padding:1.1rem;box-shadow:var(--shadow-lg)}
+    .q-meta{display:flex;justify-content:space-between;color:var(--text-secondary);font-size:.92rem;margin-bottom:.5rem}
+    .q-meta .cat{font-weight:600;color:#fff;opacity:.9}
+    .q-text{line-height:1.5}
+
+    
+    .row{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap:.6rem;
+      margin-top:.8rem;
+      align-items:stretch;
+    }
+    .input{
+      background:#0e0e0e;border:1px solid var(--border);border-radius:12px;
+      padding:0 1rem;color:#fff;font-weight:600;outline:none;height:46px;line-height:46px
+    }
+    .btn{
+      border:0;border-radius:12px;padding:0 1rem;height:46px;line-height:46px;
+      font-weight:700;cursor:pointer;transition:.2s;background:var(--gradient-primary);color:#fff;box-shadow:var(--shadow-md);display:inline-flex;align-items:center;justify-content:center
+    }
+    .btn:hover{transform:translateY(-2px)}
+    .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-secondary)}
+    .btn.badge{background:var(--gradient-secondary)}
+
+    .status{text-align:center;min-height:1.2rem;margin-top:.6rem}
+    .ok{background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .bad{color:#ff9bb2}
+
+    .history{margin-top:1rem}
+    .hlist{display:grid;gap:.5rem}
+    .item{display:flex;justify-content:space-between;align-items:center;padding:.65rem .8rem;border:1px solid var(--border);border-radius:12px;background:#111}
+    .item small{color:var(--text-muted)}
+    .item strong{font-weight:700}
+
+    
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);z-index:10}
+    .spinner{width:56px;height:56px;border:4px solid rgba(255,255,255,.15);border-top:4px solid #ff6b6b;border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    @media(min-width:768px){ .logo{font-size:2.6rem} }
+  </style>
+</head>
+<body>
+  <div class="bg"></div><div class="grid"></div>
+
+  <header>
+    <h1 class="logo">Trivia Arena</h1>
+    <p class="tag">One-word answers. Fast rounds.</p>
+  </header>
+
+  <div class="container">
+    
+    <div class="bar">
+      <div class="pill">
+        <label>Category:</label>
+        <select id="categoryNative" class="native-select" aria-hidden="true" tabindex="-1"></select>
+        <div class="selectbox" id="catBox">
+          <button class="select-trigger" id="catTrigger" aria-haspopup="listbox" aria-expanded="false">
+            <span id="catCurrent">General</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <div class="menu" id="catMenu" role="listbox" aria-label="Categories"></div>
+        </div>
+      </div>
+
+      <div class="pill">
+        <label>Difficulty:</label>
+        <button class="btn badge" id="diffBtn" title="Tap to change">Easy</button>
+      </div>
+
+      <div class="pill">
+        <span>Your Score:</span>
+        <span class="score" id="scoreNum">0</span>
+      </div>
+
+    </div>
+
+    
+    <section class="card">
+      <div class="q-meta">
+        <span class="cat" id="catMeta">General</span>
+        <span id="diffMeta">Difficulty: easy</span>
+      </div>
+      <div class="q-text" id="qText">Choose a category or difficulty to start.</div>
+
+      <div class="row">
+        <input id="answer" class="input" placeholder="Your one-word answer" autocomplete="off"/>
+        <button class="btn" id="submit">Submit</button>
+      </div>
+      <div class="status" id="status"></div>
+    </section>
+
+    
+    <section class="card history">
+        <h2 class="title">Recent Questions</h2>
+        <div id="historyList" class="hlist"></div>
+      </section>
+  </div>
+
+  
+  <div id="overlay" class="overlay"><div class="spinner"></div></div>
+
+  <script>
+    
+    const firebaseConfig = {
+        REMOVED
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth=firebase.auth(), db=firebase.database();
+
+    
+    const ui={
+      scoreNum:document.getElementById('scoreNum'),
+      submit:document.getElementById('submit'),
+      answer:document.getElementById('answer'),
+      qText:document.getElementById('qText'),
+      catMeta:document.getElementById('catMeta'),
+      diffMeta:document.getElementById('diffMeta'),
+      status:document.getElementById('status'),
+      historyList:document.getElementById('historyList'),
+      overlay:document.getElementById('overlay'),
+     
+      catBox:document.getElementById('catBox'),
+      catTrigger:document.getElementById('catTrigger'),
+      catMenu:document.getElementById('catMenu'),
+      catCurrent:document.getElementById('catCurrent'),
+      categoryNative:document.getElementById('categoryNative'),
+      diffBtn:document.getElementById('diffBtn')
+    };
+
+    
+    const CATS=["General","Science","History","Geography","Sports","Movies","Music","Technology","Literature","Art","Math","PopCulture","Animals"];
+    const DIFFS=["easy","medium","hard"];
+    let userId=null, score=0, history=[], current=null, selectedCategory="General", selectedDifficulty="easy";
+
+    
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const oneToken=s=> (s||"").toString().trim().toLowerCase().replace(/\s+/g,'');
+    const slug=s=> (s||"").toString().toLowerCase().replace(/[^a-z0-9]/g,'').trim();
+    const showOverlay=on=> ui.overlay.style.display = on ? 'flex' : 'none';
+    const ok=t=> ui.status.innerHTML=`<span class="ok">${t}</span>`;
+    const bad=t=> ui.status.innerHTML=`<span class="bad">${t}</span>`;
+    const clearStatus=()=> ui.status.innerHTML='';
+
+    function renderScore(){ ui.scoreNum.textContent=score; }
+    function renderHistory(){
+      ui.historyList.innerHTML='';
+      [...history].reverse().slice(0,12).forEach(h=>{
+        const div=document.createElement('div');
+        div.className='item';
+        div.innerHTML=`<div><strong>${h.category}</strong><br><small>${h.question}</small></div><div><small>${h.answer.toUpperCase()}</small></div>`;
+        ui.historyList.appendChild(div);
+      });
+    }
+    function setQuestion(q){
+      current=q;
+      ui.qText.textContent=q.question;
+      ui.catMeta.textContent=q.category;
+      ui.diffMeta.textContent=`Difficulty: ${q.difficulty||selectedDifficulty}`;
+      ui.answer.value=''; clearStatus(); ui.answer.focus();
+    }
+
+    
+    function buildCategorySelect(){
+      ui.categoryNative.innerHTML = CATS.map(c=>`<option value="${c}">${c}</option>`).join('');
+      ui.categoryNative.value = selectedCategory;
+
+      ui.catMenu.innerHTML = '';
+      CATS.forEach(c=>{
+        const o=document.createElement('div');
+        o.className='opt'+(c===selectedCategory?' active':'');
+        o.setAttribute('role','option'); o.setAttribute('data-val',c); o.textContent=c;
+        o.addEventListener('click', ()=> setCategory(c, true));
+        ui.catMenu.appendChild(o);
+      });
+
+      ui.catCurrent.textContent=selectedCategory;
+      ui.catTrigger.addEventListener('click', toggleMenu);
+      document.addEventListener('click', (e)=>{ if(!ui.catBox.contains(e.target)) closeMenu(); });
+      ui.catTrigger.addEventListener('keydown', (e)=>{
+        if(e.key==='Enter' || e.key===' ') { e.preventDefault(); toggleMenu(); }
+        if(e.key==='Escape') closeMenu();
+      });
+    }
+    function setCategory(val, close=true){
+      selectedCategory = val;
+      ui.categoryNative.value = val;
+      ui.catCurrent.textContent = val;
+      [...ui.catMenu.querySelectorAll('.opt')].forEach(el=> el.classList.toggle('active', el.getAttribute('data-val')===val));
+      if(close) closeMenu();
+     
+      newQuestion();
+    }
+    function toggleMenu(){
+      const open = ui.catMenu.classList.toggle('open');
+      ui.catTrigger.setAttribute('aria-expanded', open?'true':'false');
+    }
+    function closeMenu(){
+      ui.catMenu.classList.remove('open');
+      ui.catTrigger.setAttribute('aria-expanded','false');
+    }
+
+    
+    function setDifficulty(d){
+      selectedDifficulty = d;
+      ui.diffBtn.textContent = d.charAt(0).toUpperCase()+d.slice(1);
+      ui.diffMeta.textContent = `Difficulty: ${d}`;
+     
+      newQuestion();
+    }
+    function cycleDifficulty(){
+      const idx = DIFFS.indexOf(selectedDifficulty);
+      const next = DIFFS[(idx+1)%DIFFS.length];
+      setDifficulty(next);
+    }
+
+    
+    const pUser = ()=> `users/${userId}`;
+    const pTrivia = ()=> `${pUser()}/trivia`;
+    const pScore  = ()=> `${pTrivia()}/score`;
+    const pHist   = ()=> `${pTrivia()}/history`;
+    const pAsked  = ()=> `${pTrivia()}/askedSlugs`;
+    const pTotals = ()=> `${pTrivia()}/totals`;
+
+    async function loadPlayer(){
+      const snap = await db.ref(pTrivia()).get();
+      const val = snap.val()||{};
+      score = val.score||0;
+      history = Array.isArray(val.history)? val.history : [];
+      renderScore(); renderHistory();
+    }
+    async function saveScore(n){ score=n; renderScore(); await db.ref(pScore()).set(score); }
+    async function pushHistory(entry){ history.push(entry); await db.ref(pHist()).set(history); }
+    async function recordAsked(sl){ await db.ref(`${pAsked()}/${sl}`).set(true); }
+    async function getAskedSlugs(){ const s=await db.ref(pAsked()).get(); return Object.keys(s.val()||{}); }
+    async function bumpTotals(correct){
+      await db.ref(pTotals()).transaction(cur=>{
+        cur=cur||{asked:0,correct:0}; cur.asked+=1; if(correct) cur.correct+=1; return cur;
+      });
+    }
+
+    
+    function compactHistory(){
+      return history.slice(-80).map(h=>({q:h.question,a:h.answer,c:h.category,d:h.difficulty}));
+    }
+    function buildPrompt(category, difficulty){
+      const schema=`{
+  "question":"ONE clear trivia question answered by a single word only (letters a-z).",
+  "answer":"the_exact_answer_as_one_lowercase_word_no_spaces",
+  "difficulty":"easy|medium|hard",
+  "category":"General|Science|History|Geography|Sports|Movies|Music|Technology|Literature|Art|Math|PopCulture|Animals"
+}`;
+      return `You generate trivia for PlayPal.ai.
+
+Rules:
+- OUTPUT ONLY a JSON object (no code fences, no prose).
+- The "answer" MUST be ONE lowercase word using only letters a–z. NO SPACES, NO PUNCTUATION, NO NUMBERS.
+- Avoid repeating or closely rephrasing the provided history.
+- Do NOT, DO NOT ask similar type of questions as in history.
+- Use category "${category}" and difficulty "${difficulty}".
+
+JSON schema (exact keys):
+${schema}
+
+Asked previously (avoid similarity):
+${JSON.stringify(compactHistory())}
+
+Return exactly one object.`;
+    }
+    function tryParseJSON(text){
+      let t = text.trim();
+      const fence = t.match(/```(?:json)?([\s\S]*?)```/i);
+      if(fence) t = fence[1].trim();
+      const block = t.match(/\{[\s\S]*\}/);
+      if(block) t = block[0];
+      return JSON.parse(t);
+    }
+
+    async function fetchTrivia(category, difficulty){
+      const gemini = window.getGeminiModel();
+      const askedSlugs = await getAskedSlugs();
+      for(let i=0;i<3;i++){
+        try{
+          const res = await gemini.generateContent(buildPrompt(category, difficulty));
+          const txt = (await res.response.text()).trim();
+          const obj = tryParseJSON(txt);
+
+          const q = String(obj.question||'').trim();
+          const a = oneToken(obj.answer||'');
+          const cat = String(obj.category||category||'General').replace(/\s+/g,'');
+          const diff = (obj.difficulty||difficulty||'easy').toLowerCase();
+
+         
+          if(!q || !a || /\s/.test(a) || !/^[a-z]+$/.test(a)) { continue; }
+          if(!DIFFS.includes(diff)) { continue; }
+
+          const qSlug = slug(q), qaSlug = slug(q+'_'+a);
+          if(askedSlugs.includes(qSlug) || askedSlugs.includes(qaSlug)) { continue; }
+
+          await recordAsked(qSlug); await recordAsked(qaSlug);
+
+          return { id:(Math.random().toString(36).slice(2)+Date.now().toString(36)), question:q, answer:a, category:cat, difficulty:diff, ts:Date.now() };
+        }catch(e){
+          console.warn('Parse/generation retry', e);
+          await sleep(300);
+        }
+      }
+     
+      const bank=[
+        {q:"Capital of Italy?",a:"rome",c:"Geography"},
+        {q:"Painter of Mona Lisa surname?",a:"daVinci".toLowerCase(),c:"Art"},
+        {q:"Author surname of 'Frankenstein'?",a:"shelley",c:"Literature"},
+        {q:"Primary color that mixes with blue to make green?",a:"yellow",c:"Art"},
+        {q:"Device brand that created iphone?",a:"apple",c:"Technology"},
+      ];
+      const pick = bank[Math.floor(Math.random()*bank.length)];
+      return { id:(Math.random().toString(36).slice(2)+Date.now().toString(36)), question:pick.q, answer:pick.a, category:pick.c, difficulty, ts:Date.now()};
+    }
+
+    
+    async function newQuestion(){
+      showOverlay(true); clearStatus();
+      try{
+        const q = await fetchTrivia(selectedCategory, selectedDifficulty);
+        setQuestion(q);
+      }catch(e){
+        bad("Couldn't fetch question. Try again.");
+        console.error(e);
+      }finally{
+        showOverlay(false);
+      }
+    }
+    async function submit(){
+      if(!current) return;
+      const guess = oneToken(ui.answer.value);
+      if(!guess || !/^[a-z]+$/.test(guess)){ bad("Enter a single lowercase word (letters a–z)."); return; }
+      const correct = guess === oneToken(current.answer);
+      if(correct){
+        ok("Correct!");
+        await saveScore(score+1);
+      } else {
+        bad(`Wrong. Answer: ${current.answer.toUpperCase()}`);
+      }
+      await pushHistory(current);
+      await bumpTotals(correct);
+      renderHistory();
+      await sleep(650);
+      newQuestion();
+    }
+
+    
+    function wire(){
+      buildCategorySelect();
+      ui.diffBtn.addEventListener('click', cycleDifficulty);
+      ui.submit.addEventListener('click', submit);
+      ui.answer.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+    }
+    async function waitAuth(){
+      return new Promise((resolve)=>{
+        if(auth.currentUser) return resolve(auth.currentUser);
+        const t=setTimeout(()=>location.href='index.html',4000);
+        const unsub=auth.onAuthStateChanged(u=>{ clearTimeout(t); unsub(); if(!u) location.href='index.html'; else resolve(u); });
+      });
+    }
+
+    (async function main(){
+      try{
+        wire();
+        const u = await waitAuth(); userId=u.uid;
+        await loadPlayer();
+       
+        newQuestion();
+      }catch(e){ console.error(e); }
+    })();
+  </script>
+</body>
+</html>

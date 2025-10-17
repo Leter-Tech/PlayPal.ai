@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Draw & Guess – PlayPal.ai</title>
+  <link rel="icon" href="icons/favicon-16x16.png" type="image/png" sizes="16x16">
+  <link rel="icon" href="icons/favicon-32x32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="icons/favicon.ico">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/android-chrome-192x192.png" type="image/png" sizes="192x192">
+  <link rel="icon" href="icons/android-chrome-512x512.png" type="image/png" sizes="512x512">
+
+  
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+  
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/sketch@0.1.3/dist/magentasketch.min.js"></script>
+
+  <script type="module">
+    import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.24.0";
+    
+    let geminiModel;
+    
+    async function initializeGemini() {
+        try {
+            const API_KEY = "REMOVED"; 
+            const genAI = new GoogleGenerativeAI(API_KEY);
+            geminiModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+            console.log("AI Model initialized successfully");
+        } catch (error) {
+            console.error("Failed to initialize AI Model:", error);
+        }
+    }
+    
+   
+    window.initializeGemini = initializeGemini;
+    window.getGeminiModel = () => geminiModel;
+    
+    initializeGemini();
+</script>
+
+
+
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --primary:#ff6b6b;--secondary:#4ecdc4;--accent:#45b7d1;--success:#6c5ce7;
+      --bg-primary:#0a0a0a;--bg-secondary:#121212;--bg-tertiary:#1b1b1b;--bg-glass:rgba(255,255,255,.06);
+      --text-primary:#fff;--text-secondary:#c9c9c9;--text-muted:#8a8a8a;
+      --border:rgba(255,255,255,.12);--border-hover:rgba(255,255,255,.22);
+      --shadow-md:0 8px 32px rgba(0,0,0,.28);--shadow-lg:0 16px 64px rgba(0,0,0,.35);
+      --gradient-primary:linear-gradient(135deg,#ff6b6b 0%,#4ecdc4 100%);
+      --gradient-secondary:linear-gradient(135deg,#45b7d1 0%,#96ceb4 100%);
+      --gradient-bg:linear-gradient(135deg,#0a0a0a 0%,#1a1a1a 50%,#2a2a2a 100%)
+    }
+    body{font-family:'Poppins',sans-serif;background:var(--bg-primary);color:var(--text-primary);min-height:100vh;overflow-x:hidden}
+    .bg{position:fixed;inset:0;z-index:-2;background:var(--gradient-bg)}
+    .grid{position:fixed;inset:0;z-index:-1;background-image:
+      linear-gradient(rgba(255,107,107,.03) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,107,107,.03) 1px,transparent 1px);
+      background-size:50px 50px;animation:gridMove 22s linear infinite}
+    @keyframes gridMove{to{transform:translate(50px,50px)}}
+
+    header{text-align:center;padding:1.2rem 1rem}
+    .logo{font-family:'Fredoka One',cursive;font-size:2.2rem;background:var(--gradient-primary);
+      -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:float 3s ease-in-out infinite}
+    @keyframes float{50%{transform:translateY(-6px)}}
+    .tag{color:var(--text-secondary);font-size:.95rem;margin-top:.25rem}
+    .container{max-width:720px;margin:0 auto;padding:1rem}
+
+    .card{margin-top:1rem;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:22px;padding:1.1rem;box-shadow:var(--shadow-lg)}
+    .title{font-size:1.3rem;text-align:center;margin-bottom:.75rem;font-weight:700;background:var(--gradient-primary);
+      -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+    .bar{display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center;align-items:center}
+    .pill{display:flex;align-items:center;gap:.6rem;background:var(--bg-glass);border:1px solid var(--border);
+      padding:.6rem .9rem;border-radius:14px;box-shadow:var(--shadow-md)}
+    .pill label{color:#fff;opacity:.9;font-weight:600;letter-spacing:.15px}
+
+    .score{font-weight:700;background:var(--gradient-primary);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+    .game-area{text-align:center;margin:1rem 0}
+    .canvas-container{position:relative;display:inline-block;border:2px solid var(--border);border-radius:16px;overflow:hidden;background:#fff;max-width:100%}
+    .canvas-container.ai-drawing{border-color:var(--primary)}
+    .canvas-container.user-drawing{border-color:var(--secondary)}
+    canvas{display:block;background:#fff;touch-action:none;width:100%;height:auto;max-width:400px;max-height:300px}
+
+    .word-display{font-size:1.5rem;font-weight:700;margin:1rem 0;min-height:2rem;letter-spacing:.1em}
+    .word-display.correct{color:var(--success)}
+    .word-display.wrong{color:#ff9bb2}
+
+    .controls{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin:1rem 0}
+    .btn{border:0;border-radius:12px;padding:.75rem 1.5rem;font-weight:700;cursor:pointer;transition:.2s;background:var(--gradient-primary);color:#fff;box-shadow:var(--shadow-md);display:inline-flex;align-items:center;justify-content:center}
+    .btn:hover{transform:translateY(-2px)}
+    .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-secondary)}
+    .btn.badge{background:var(--gradient-secondary)}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+
+    .timer{font-size:1.2rem;font-weight:700;margin:.5rem 0;color:var(--accent)}
+    .timer.warning{color:#ff9bb2}
+    .timer.danger{color:#ff6b6b}
+
+    .status{text-align:center;min-height:1.2rem;margin:.5rem 0;color:var(--text-secondary)}
+    .ok{background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+    .bad{color:#ff9bb2}
+
+    .guess-input{display:flex;gap:.5rem;margin:1rem 0;justify-content:center;flex-wrap:wrap}
+    .input{background:#0e0e0e;border:1px solid var(--border);border-radius:12px;padding:.75rem 1rem;color:#fff;font-weight:600;outline:none;min-width:200px;text-align:center}
+
+    .ai-guesses{background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:.75rem;margin:1rem 0;min-height:3rem}
+    .ai-guesses h4{color:var(--text-secondary);font-size:.9rem;margin-bottom:.5rem}
+    .guess-list{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
+    .guess-item{background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:.3rem .6rem;font-size:.85rem;color:var(--text-secondary)}
+
+    .round-info{display:flex;justify-content:space-between;align-items:center;margin:1rem 0;padding:.75rem;background:var(--bg-glass);border-radius:12px}
+    .round-info .turn{font-weight:700;color:var(--accent)}
+    .round-info .scores{display:flex;gap:1rem;font-size:.9rem}
+
+    .history{margin-top:1rem}
+    .hlist{display:grid;gap:.5rem}
+    .item{display:flex;justify-content:space-between;align-items:center;padding:.65rem .8rem;border:1px solid var(--border);border-radius:12px;background:#111}
+    .item small{color:var(--text-muted)}
+    .item strong{font-weight:700}
+
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);z-index:10}
+    .spinner{width:56px;height:56px;border:4px solid rgba(255,255,255,.15);border-top:4px solid #ff6b6b;border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    @media(min-width:768px){ .logo{font-size:2.6rem} }
+  </style>
+</head>
+<body>
+  <div class="bg"></div><div class="grid"></div>
+
+  <header>
+    <h1 class="logo">Draw & Guess</h1>
+    <p class="tag">AI vs Human drawing battle. 3 rounds each.</p>
+  </header>
+
+  <div class="container">
+    
+    <div class="bar">
+      <div class="pill">
+        <span>Round:</span>
+        <span class="score" id="roundNum">0/3</span>
+      </div>
+
+      <div class="pill">
+        <span>Your Score:</span>
+        <span class="score" id="userScore">0</span>
+      </div>
+
+      <div class="pill">
+        <span>AI Score:</span>
+        <span class="score" id="aiScore">0</span>
+      </div>
+    </div>
+
+    
+    <div class="round-info">
+      <div class="turn" id="turnInfo">AI's Turn - Drawing</div>
+      <div class="scores">
+        <span>You: <span id="userScoreSmall">0</span></span>
+        <span>AI: <span id="aiScoreSmall">0</span></span>
+      </div>
+    </div>
+
+    
+    <section class="card">
+      <h2 class="title" id="gameTitle">AI is drawing...</h2>
+      
+      <div class="game-area">
+        <div class="canvas-container" id="canvasContainer">
+          <canvas id="drawCanvas" width="400" height="300"></canvas>
+        </div>
+        
+        <div class="word-display" id="wordDisplay"></div>
+        <div class="timer" id="timer"></div>
+        <div class="status" id="status"></div>
+        
+        
+        <div class="guess-input" id="userGuessArea" style="display:none">
+          <input type="text" id="userGuess" class="input" placeholder="What is the AI drawing?" autocomplete="off">
+          <button class="btn" id="submitGuess">Submit</button>
+        </div>
+        
+        
+        <div class="ai-guesses" id="aiGuesses" style="display:none">
+          <h4 id="aiStatus">AI is idle</h4>
+          <div class="guess-list" id="guessList"></div>
+        </div>
+        
+        <div class="controls">
+          
+          <button class="btn" id="guessBtn" style="display:none">Guess</button>
+          <button class="btn ghost" id="clearBtn" style="display:none">Clear</button>
+          <button class="btn ghost" id="redrawBtn" style="display:none">Redraw</button>
+          
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  
+  <div id="overlay" class="overlay"><div class="spinner"></div></div>
+
+  <script>
+    
+    const firebaseConfig = {
+      REMOVED
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth=firebase.auth(), db=firebase.database();
+
+    
+    const ui={
+      roundNum:document.getElementById('roundNum'),
+      userScore:document.getElementById('userScore'),
+      aiScore:document.getElementById('aiScore'),
+      userScoreSmall:document.getElementById('userScoreSmall'),
+      aiScoreSmall:document.getElementById('aiScoreSmall'),
+      turnInfo:document.getElementById('turnInfo'),
+      gameTitle:document.getElementById('gameTitle'),
+      drawCanvas:document.getElementById('drawCanvas'),
+      canvasContainer:document.getElementById('canvasContainer'),
+      wordDisplay:document.getElementById('wordDisplay'),
+      timer:document.getElementById('timer'),
+      status:document.getElementById('status'),
+      userGuessArea:document.getElementById('userGuessArea'),
+      userGuess:document.getElementById('userGuess'),
+      submitGuess:document.getElementById('submitGuess'),
+      aiGuesses:document.getElementById('aiGuesses'),
+      aiStatus:document.getElementById('aiStatus'),
+      guessList:document.getElementById('guessList'),
+      clearBtn:document.getElementById('clearBtn'),
+      redrawBtn:document.getElementById('redrawBtn'),
+      guessBtn:document.getElementById('guessBtn'),
+      overlay:document.getElementById('overlay')
+    };
+
+    
+    let WORDS = [];
+    let userId=null, currentRound=1, maxRounds=3, userScore=0, aiScore=0, history=[], usedWords=[];
+    let currentWord="", currentTurn="ai-draw", gamePhase="waiting", timeLeft=0, timerInterval=null;
+    let sketchModel=null, modelsLoaded=false;
+
+   
+    let gameStarted = false;
+    let turnLock = false;
+    let guessResolved = false;
+    let aiGuessFired = false;
+
+    
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const showOverlay=on=> ui.overlay.style.display = on ? 'flex' : 'none';
+    const ok=t=> ui.status.innerHTML=`<span class="ok">${t}</span>`;
+    const bad=t=> ui.status.innerHTML=`<span class="bad">${t}</span>`;
+    const clearStatus=()=> ui.status.innerHTML='';
+
+    function renderScores(){
+      ui.userScore.textContent=userScore;
+      ui.aiScore.textContent=aiScore;
+      ui.userScoreSmall.textContent=userScore;
+      ui.aiScoreSmall.textContent=aiScore;
+      const displayRound = Math.min(currentRound, maxRounds);
+      ui.roundNum.textContent=`${displayRound}/${maxRounds}`;
+    }
+
+    function resetRoundState(){
+      stopTimer();
+      showOverlay(false);
+      clearStatus();
+      ui.aiStatus.textContent='AI is idle';
+      ui.guessList.innerHTML='';
+      ui.userGuess.value = '';
+      guessResolved = false;
+      aiGuessFired = false;
+    }
+
+    function revealAlternateLetters(word){
+     
+      const chars = word.split('');
+      let idx = 0;
+      return chars.map(c=>{
+        if(c===' ') return ' ';
+        const show = (idx % 2 === 0);
+        idx++;
+        return show ? c : '_';
+      }).join(' ');
+    }
+
+    function normalizeWord(w){
+      if(!w) return 'cat';
+      const s=w.trim().toLowerCase().replace(/\s+/g,'_').replace(/-/g,'_');
+      if(s==='mona') return 'the_mona_lisa';
+      return s;
+    }
+
+    async function loadWordList(){
+     
+      const res = await fetch('doodle_categories.txt', {cache:'no-store'});
+      const txt = await res.text();
+      WORDS = txt.split('\n')
+                 .map(l=>l.trim())
+                 .filter(l=>l.length>0 && !l.startsWith('#'));
+    }
+
+    async function getRandomWord(){
+     
+      const available = WORDS.filter(w=>!usedWords.includes(w));
+      if(available.length===0){
+        usedWords = [];
+        await db.ref(pUsedWords()).set(usedWords);
+      }
+      const pool = WORDS.filter(w=>!usedWords.includes(w));
+      const word = pool[Math.floor(Math.random()*pool.length)];
+      usedWords.push(word);
+     
+      await db.ref(pUsedWords()).set(usedWords);
+      return word;
+    }
+
+    
+    const canvas=ui.drawCanvas, ctx=canvas.getContext('2d');
+    let drawing=false, lastX=0, lastY=0;
+
+    function setupCanvas(){
+      canvas.width=400; canvas.height=300;
+      ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.strokeStyle='#000'; ctx.fillStyle='#fff';
+      clearCanvas();
+    }
+
+    function clearCanvas(){
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    function getXY(e){
+      const r=canvas.getBoundingClientRect();
+      const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+      const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+      return{x,y};
+    }
+
+    function startDraw(e){
+      if(gamePhase!=='user-drawing') return;
+      drawing=true; ({x:lastX,y:lastY}=getXY(e));
+      ctx.strokeStyle='#000';
+    }
+
+    function draw(e){
+      if(!drawing || gamePhase!=='user-drawing') return;
+      const{x,y}=getXY(e);
+      ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(x,y); ctx.stroke();
+      lastX=x; lastY=y;
+    }
+
+    function endDraw(){ drawing=false; }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+    canvas.addEventListener('touchstart', e=>{e.preventDefault(); startDraw(e);}, {passive:false});
+    canvas.addEventListener('touchmove', e=>{e.preventDefault(); draw(e);}, {passive:false});
+    canvas.addEventListener('touchend', e=>{e.preventDefault(); endDraw(e);}, {passive:false});
+
+    
+    function startTimer(seconds, callback){
+      timeLeft=seconds;
+      ui.timer.textContent=`${timeLeft}s`;
+      ui.timer.className='timer';
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval=setInterval(()=>{
+        timeLeft--;
+        ui.timer.textContent=`${timeLeft}s`;
+        if(timeLeft<=5) ui.timer.className='timer danger';
+        else if(timeLeft<=10) ui.timer.className='timer warning';
+        else ui.timer.className='timer';
+        if(timeLeft<=0){
+          clearInterval(timerInterval);
+          timerInterval=null;
+          callback();
+        }
+      }, 1000);
+    }
+
+    function stopTimer(){
+      if(timerInterval){ clearInterval(timerInterval); timerInterval=null; }
+      ui.timer.textContent='';
+      ui.timer.className='timer';
+    }
+
+    
+    const MODEL_BASE='REMOVED';
+
+    async function loadSketchModel(word){
+      const category=normalizeWord(word);
+      const url=`${MODEL_BASE}/${category}.gen.json`;
+      if(typeof ms!=='object' || !ms.SketchRNN) throw new Error('Magenta Sketch not available');
+      const model=new ms.SketchRNN(url);
+      await model.initialize();
+      if(model.setPixelFactor) model.setPixelFactor(4.0);
+      sketchModel=model;
+      return category;
+    }
+
+    async function aiDraw(word){
+     
+      await loadSketchModel(word);
+      clearCanvas();
+      let rnnState=sketchModel.zeroState();
+      const zi=sketchModel.zeroInput();
+      let dx=zi[0]||0, dy=zi[1]||0, prevPen=[zi[2],zi[3],zi[4]];
+      const cssW=canvas.clientWidth, cssH=canvas.clientHeight;
+      const cx=Math.floor(cssW/2), cy=Math.floor(cssH/3);
+      ctx.setTransform(1,0,0,1,0,0); ctx.translate(cx,cy);
+      let x=0, y=0, maxSteps=360, temperature=0.65, scale=0.9;
+      const PEN={DOWN:0,UP:1,END:2};
+      for(let step=0; step<maxSteps; step++){
+        rnnState=sketchModel.update([dx,dy,prevPen[0],prevPen[1],prevPen[2]], rnnState);
+        const pdf=sketchModel.getPDF(rnnState, temperature);
+        const out=sketchModel.sample(pdf);
+        const ndx=(out[0]||0)*scale, ndy=(out[1]||0)*scale, nextPen=[out[2],out[3],out[4]];
+        if(prevPen[PEN.DOWN]===1){
+          ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+ndx,y+ndy); ctx.stroke();
+        }
+        x+=ndx; y+=ndy; dx=ndx; dy=ndy; prevPen=nextPen;
+        if(prevPen[PEN.END]===1) break;
+        await sleep(50);
+      }
+      ctx.setTransform(1,0,0,1,0,0);
+    }
+
+    
+    async function getGeminiGuessOnce(reason){
+      if (aiGuessFired) return null;
+      aiGuessFired = true;
+
+      try{
+       
+        ui.aiStatus.innerHTML = '<span class="ok">AI is analyzing your drawing…</span>';
+
+       
+        const model = window.getGeminiModel ? window.getGeminiModel() : null;
+        if(!model){
+          ui.aiStatus.innerHTML = '<span class="bad">AI model not ready.</span>';
+          return null;
+        }
+
+       
+        const imageData = canvas.toDataURL('image/png');
+
+        const context = `
+You are "Gemini 2.0 Flash" judging a Draw & Guess game.
+Look at the user's black-on-white canvas sketch and guess the object category.
+Rules:
+- Possible answers are standard Quick, Draw! categories (single noun phrases like "cat", "airplane", "toothbrush", etc.).
+- Return exactly one best guess.
+- Use only characters a-z, spaces, and common punctuation—NO emojis.
+- Be conservative: if uncertain, still output your best single guess.
+Respond ONLY with JSON of the form:
+{"label": "<lowercase label>", "confidence": 0.0-1.0, "reason": "<short why>"}        
+        `.trim();
+
+       
+        const result = await model.generateContent([
+          context,
+          { inlineData: { data: imageData.split(',')[1], mimeType: 'image/png' } }
+        ]);
+        const response = await result.response;
+        const text = (response && response.text) ? response.text().trim() : '';
+
+       
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('No JSON in AI response');
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        const aiLabel = (parsed.label || '').toLowerCase().trim();
+        const conf = Number(parsed.confidence || 0);
+        const reason = parsed.reason || '';
+
+       
+        ui.guessList.innerHTML = `<div class="guess-item"><strong>AI:</strong> ${aiLabel} (${Math.round(conf*100)}%)</div>`;
+
+       
+        const success = aiLabel === currentWord.toLowerCase();
+        if(success){
+          aiScore++;
+          ok(`AI guessed it: ${currentWord}`);
+          ui.wordDisplay.textContent=currentWord;
+          ui.wordDisplay.className='word-display correct';
+        }else{
+          bad(`AI guessed "${aiLabel}". Correct was: ${currentWord}`);
+          ui.wordDisplay.textContent=currentWord;
+          ui.wordDisplay.className='word-display wrong';
+        }
+        renderScores();
+        await sleep(1600);
+        nextRound();
+        return {label: aiLabel, confidence: conf, reason};
+      }catch(err){
+        console.error('Gemini guess error:', err);
+        ui.aiStatus.innerHTML = '<span class="bad">AI failed to analyze this drawing.</span>';
+        ui.wordDisplay.textContent=currentWord;
+        ui.wordDisplay.className='word-display wrong';
+        await sleep(1200);
+        nextRound();
+        return null;
+      }
+    }
+
+    
+    async function startAITurn(){
+      if (turnLock) return;
+      turnLock = true;
+      resetRoundState();
+
+      currentTurn='ai-draw';
+      gamePhase='ai-drawing';
+      ui.canvasContainer.className='canvas-container ai-drawing';
+      ui.gameTitle.textContent='AI is drawing...';
+      ui.wordDisplay.textContent='';
+      ui.userGuessArea.style.display='none';     
+      ui.aiGuesses.style.display='none';
+      ui.clearBtn.style.display='none';
+      ui.redrawBtn.style.display='none';
+      ui.guessBtn.style.display='none';
+      ui.turnInfo.textContent="AI's Turn - Drawing";
+      
+     
+      let attempts = 0, success=false;
+      while(attempts < 30 && !success) {
+        try {
+          currentWord = await getRandomWord();
+          ui.wordDisplay.textContent = revealAlternateLetters(currentWord);
+          clearCanvas();
+          await aiDraw(currentWord); 
+          success = true;
+        } catch(err) {
+          console.warn(`Failed to draw ${currentWord}, retrying...`, err);
+          attempts++;
+        }
+      }
+      if(!success){
+        bad('Could not load any AI drawing models. Please refresh.');
+        turnLock = false;
+        return;
+      }
+
+     
+      gamePhase='user-guess';
+      ui.gameTitle.textContent='What is the AI drawing?';
+      ui.userGuessArea.style.display='flex';
+      ui.redrawBtn.style.display='inline-flex';
+      startTimer(30, endUserGuess);
+
+      turnLock = false;
+    }
+
+    async function safeRedrawCurrentAIDrawing(){
+      if (turnLock) return;
+      if (currentTurn !== 'ai-draw') return;
+      if (gamePhase !== 'user-guess' && gamePhase !== 'ai-drawing') return;
+
+      turnLock = true;
+      resetRoundState();
+      ui.gameTitle.textContent = 'AI is drawing...';
+      ui.redrawBtn.style.display = 'none';
+      ui.userGuessArea.style.display='none';
+      clearCanvas();
+      try{
+        ui.wordDisplay.textContent = revealAlternateLetters(currentWord);
+        await aiDraw(currentWord);
+      } finally {
+        gamePhase = 'user-guess';
+        ui.gameTitle.textContent = 'What is the AI drawing?';
+        ui.userGuessArea.style.display='flex';
+        ui.redrawBtn.style.display = 'inline-flex';
+        startTimer(30, endUserGuess);
+        turnLock = false;
+      }
+    }
+
+    async function endUserGuess(){
+      if (guessResolved) return;
+      guessResolved = true;
+
+      stopTimer();
+      const guess=ui.userGuess.value.trim().toLowerCase();
+      const correct=guess===currentWord.toLowerCase();
+      
+      if(correct){
+        ok('Correct!');
+        userScore++;
+      }else{
+        bad(`Wrong! It was: ${currentWord}`);
+      }
+      
+      ui.wordDisplay.textContent=currentWord;
+      ui.wordDisplay.className=correct?'word-display correct':'word-display wrong';
+      ui.userGuessArea.style.display='none';
+      ui.redrawBtn.style.display='none';
+      
+      renderScores();
+      await sleep(1200);
+      guessResolved = false;
+      startUserTurn();
+    }
+
+    async function startUserTurn(){
+      if (turnLock) return;
+      turnLock = true;
+      resetRoundState();
+
+      currentTurn='user-draw';
+      gamePhase='user-drawing';
+      ui.canvasContainer.className='canvas-container user-drawing';
+      ui.gameTitle.textContent='Your turn to draw!';
+      ui.userGuessArea.style.display='none';
+      ui.aiGuesses.style.display='block';
+      ui.clearBtn.style.display='inline-flex';
+      ui.guessBtn.style.display='inline-flex';  
+      ui.redrawBtn.style.display='none';
+      ui.turnInfo.textContent='Your Turn - Drawing';
+      
+      currentWord=await getRandomWord();
+      ui.wordDisplay.textContent=currentWord;
+      clearCanvas();
+      
+      startTimer(60, () => {
+       
+        if(!aiGuessFired) getGeminiGuessOnce('timeout');
+      });
+
+      turnLock = false;
+    }
+
+   
+    ui.guessBtn.addEventListener('click', () => {
+      if (gamePhase!=='user-drawing') return;
+      getGeminiGuessOnce('user_clicked');
+    });
+
+   
+    ui.clearBtn.addEventListener('click', clearCanvas);
+
+    async function nextRound(){
+      resetRoundState();
+      const wasCorrect = ui.wordDisplay.classList.contains('correct');
+
+      const roundEntry={
+        round:currentRound,
+        word:currentWord,
+        userCorrect:currentTurn==='ai-draw' ? wasCorrect : false,
+        aiCorrect:currentTurn==='user-draw' ? wasCorrect : false,
+        ts:Date.now()
+      };
+      history.push(roundEntry);
+      await pushHistory(roundEntry);
+      
+      currentRound++;
+      renderScores();
+      if(currentRound>maxRounds){
+        endGame();
+      }else{
+        await sleep(500);
+        startAITurn();
+      }
+    }
+
+    function endGame(){
+      resetRoundState();
+      ui.gameTitle.textContent='Game Over!';
+      ui.wordDisplay.textContent=`Final Score: You ${userScore} - ${aiScore} AI`;
+      ui.turnInfo.textContent=userScore>aiScore?'You Win!':userScore<aiScore?'AI Wins!':'Tie!';
+      ui.userGuessArea.style.display='none';
+      ui.aiGuesses.style.display='none';
+      ui.clearBtn.style.display='none';
+      ui.guessBtn.style.display='none';
+      ui.redrawBtn.style.display='none';
+    }
+
+    
+    const pUser=()=>`users/${userId}`;
+    const pDoodle=()=>`${pUser()}/doodle`;
+    const pScore=()=>`${pDoodle()}/score`;
+    const pHist=()=>`${pDoodle()}/history`;
+    const pUsedWords=()=>`${pDoodle()}/usedWords`;
+
+    async function loadPlayer(){
+      const snap=await db.ref(pDoodle()).get();
+      const val=snap.val()||{};
+      userScore=val.userScore||0;
+      aiScore=val.aiScore||0;
+      history=Array.isArray(val.history)?val.history:[];
+      usedWords=Array.isArray(val.usedWords)?val.usedWords:[];
+      renderScores();
+    }
+
+    async function saveScore(){
+      await db.ref(pScore()).set({userScore,aiScore});
+    }
+
+    async function pushHistory(entry){
+      await db.ref(pHist()).set(history);
+    }
+
+    
+    ui.submitGuess.addEventListener('click', endUserGuess);
+    ui.userGuess.addEventListener('keydown', e=>{if(e.key==='Enter') endUserGuess();});
+    ui.redrawBtn.addEventListener('click', safeRedrawCurrentAIDrawing);
+
+    
+    async function waitAuth(){
+      return new Promise((resolve)=>{
+        if(auth.currentUser) return resolve(auth.currentUser);
+        const t=setTimeout(()=>location.href='index.html',4000);
+        const unsub=auth.onAuthStateChanged(u=>{clearTimeout(t); unsub(); if(!u) location.href='index.html'; else resolve(u);});
+      });
+    }
+
+    async function loadModels(){
+      ui.status.innerHTML='Loading AI models...';
+      showOverlay(true);
+      try{
+       
+        modelsLoaded=true;
+        ui.status.innerHTML='Models loaded! Starting game...';
+      }catch(err){
+        modelsLoaded=true;
+        bad('Failed to fully load AI models. Using fallbacks where needed.');
+        console.error('Model loading error:', err);
+      }finally{
+        showOverlay(false);
+        await sleep(300);
+        clearStatus();
+      }
+    }
+
+    function startGameOnce(){
+      if (gameStarted) return;
+      gameStarted = true;
+      startAITurn();
+    }
+
+    (async function main(){
+      try{
+        setupCanvas();
+        const u=await waitAuth(); userId=u.uid;
+        await loadPlayer();
+        await loadWordList();  
+        await loadModels();
+        startGameOnce();       
+      }catch(e){
+        console.error('Main initialization error:', e);
+        bad('Failed to initialize game. Please refresh.');
+      }
+    })();
+
+   
+    window.addEventListener('beforeunload', ()=>{ saveScore(); });
+  </script>
+</body>
+</html>
